@@ -1,0 +1,119 @@
+/**
+ * @file      print_server_client.c
+ * @author    Deeksha Juneja
+ * @date      2016-03-05
+ */
+
+#define _GNU_SOURCE
+
+#include "print_server_client.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <mqueue.h>
+#include <string.h>
+#include <sys/mman.h>
+
+//typedef struct PRINTER_DRIVER_STRUCT printer_driver_t;
+/// A printer driver returned by printer_list_drivers()
+struct printer_drivers
+{
+	/// The name of the printer
+	char* printer_name;
+	/// The driver name
+	char* driver_name;
+	/// The driver version
+	char* driver_version;
+};
+
+struct sharedmemory
+	{
+		char string[100];
+	};
+
+/**
+ * @brief     List the currently installed printer drivers from the print server
+ * @details   This function should query the print server for a list of currently installed drivers
+ *            and return them as a NULL terminated array of printer_driver_t objects.
+ * @param     number
+ *                 Returns the number of printer drivers currently installed in the print server daemon
+ * @return    An array of number printer_driver_t* objects followed by NULL
+ * @example
+ *
+ * int num;
+ * printer_driver* list[] = printer_list_driver(&num);
+ * printf("printer_name=%s", list[0]->printer_name);
+ **/
+int printer_print(int* handle, char* driver, char* job_name, char* description, char* file)
+	{
+	
+
+		// Create message queue to send the information to the daemon printer
+		mqd_t msg_queue = mq_open("/CprE308-Printer-Queue", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP, NULL);
+		if (msg_queue == -1)
+		{
+			perror("mq_open\n");
+			return -1;
+		}
+
+		//build the string
+		char* message = NULL;
+		asprintf(&message, "#device=%s\n#name=%s\n#description=%s\n#file=%s\n", driver, job_name, description, file);
+
+		// Send the data to the printer
+		if( mq_send(msg_queue, message, strlen(message), 27))
+		{
+			perror("mq_send");
+			return -1;
+		}
+
+		mq_unlink("/Printer-Queue");
+		return 0;
+	}
+
+printer_driver_t** printer_list_drivers(int *number)
+	{
+		*number = 2;
+		struct printer_drivers *t = malloc((2)*sizeof(struct printer_drivers));
+		char *buffer;
+
+		/// Open the shared memory space
+		int fd;
+		fd = shm_open("/printernames", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP);
+		
+		if(!fd)
+		{
+			perror("shm_open\n");
+			return -1;
+		}
+		
+		if(ftruncate(fd, sizeof(struct sharedmemory)))
+		{
+			perror("ftruncate\n");
+			return -1;
+		}
+		
+		struct sharedmemory* shared_mem;
+		shared_mem = mmap(NULL, sizeof(struct sharedmemory), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+		if(!shared_mem)
+		{
+			perror("mmap\n");
+			return -1;
+		}
+		if(close(fd))
+		{
+			perror("close\n");
+			return -1;
+		}
+
+
+		/// Split the string and set printer names
+	   	char *token;
+	   	token = strtok(shared_mem->string, " ");
+		t[0].printer_name = token;
+	    	token = strtok(NULL, " ");
+		t[1].printer_name = token;
+	
+		return t;
+	}

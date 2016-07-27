@@ -1,0 +1,91 @@
+#include<sys/wait.h>
+#include<string.h>
+#include<unistd.h>
+#include<stdio.h>
+#include<stdlib.h>
+int ends_with(const char* filetype, const char* extension){
+	if(strcmp(filetype, extension) ==0){
+		return 1;
+	}
+	return 0;
+}
+int main(int argc, char*argv[]){
+
+	int status =0;
+	
+	//check the user input for a file
+	if(argc<2){
+		printf("Please input a file");
+		return -1;
+	}
+		
+	//Check the extension and match the extension to the program
+	char *extensions[] = {".doc",".odt",".png",".txt",".pdf",".mp3"};
+	char *programs[] = {"libreoffice","libreoffice","eog","gedit","evince","vlc"};
+	
+	//seperate the extension and compare
+	int i, j,k,size;
+	int flag;
+	char *filename;
+	char *extension;
+	size = sizeof(argc);
+	pid_t child[i];
+	for(i=0; i<size; i++){
+		child[i] = fork();
+		if(child[i]==0){
+			flag = 0;
+			filename = argv[i+1];	
+			extension = strrchr(filename,'.');
+			for(j = 0; j<6; j++)
+			{ 
+				// validating the extension
+				if(strcmp(extension, extensions[j])==0)
+				{
+					flag = 1;
+					if(ends_with(extension, extensions[j])){
+						printf("%s\n",programs[j]);
+						execlp(programs[j],programs[j],filename,NULL);
+						perror("Child process running encountered an error");
+						return -1;
+					}
+					else
+					{
+						continue;
+					}
+				}
+			}	
+			if(flag==0)
+				{
+					printf("The extension %s is not supported\n", extension);
+					return -1;
+				}
+			return -1;
+		}
+	
+		else if(child[i] > 0)
+		{
+			waitpid(child[i],&status,WNOHANG);
+		}
+
+		else
+		{
+			perror("fork");
+			exit(-1);
+		}
+		
+	}
+	for(i=0; i<size; i++){
+		waitpid(-1,&status,0);
+	}
+	
+	if(status == 0){
+		printf("Normal Termination \n");
+	}
+	else{
+		printf("Termination with error \n");
+	}
+	
+	return 0;	
+
+
+}

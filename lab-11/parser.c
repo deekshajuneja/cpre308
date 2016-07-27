@@ -1,0 +1,535 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+       
+uint8_t *FAT;
+
+typedef struct fat_extBS_32
+{
+	//extended fat32 stuff
+	uint32_t		table_size_32;
+	uint16_t		extended_flags;
+	uint16_t		fat_version;
+	uint32_t		root_cluster;
+	uint16_t		fat_info;
+	uint16_t		backup_BS_sector;
+	uint8_t 		reserved_0[12];
+	uint8_t		drive_number;
+	uint8_t 		reserved_1;
+	uint8_t		boot_signature;
+	uint32_t 		volume_id;
+	uint8_t		volume_label[11];
+	uint8_t		fat_type_label[8];
+	uint8_t		bote_code[420];
+	uint16_t	signature;
+ 
+}__attribute__((packed)) fat_extBS_32_t;
+ 
+typedef struct fat_extBS_16
+{
+	//extended fat12 and fat16 stuff
+	uint8_t		bios_drive_num;
+	uint8_t		reserved1;
+	uint8_t		boot_signature;
+	uint32_t		volume_id;
+	uint8_t		volume_label[11];
+	uint8_t		fat_type_label[8];
+	uint8_t		boot_code[448];
+	uint16_t	signature;
+ 
+}__attribute__((packed)) fat_extBS_16_t;
+ 
+typedef struct fat_BPM
+{
+	uint8_t 		bootjmp[3];
+	uint8_t 		oem_name[8];
+	uint16_t 	    bytes_per_sector;
+	uint8_t		sectors_per_cluster;
+	uint16_t		reserved_sector_count;
+	uint8_t		table_count;
+	uint16_t		root_entry_count;
+	uint16_t		total_sectors_16;
+	uint8_t		media_type;
+	uint16_t		table_size_16;
+	uint16_t		sectors_per_track;
+	uint16_t		head_side_count;
+	uint32_t 		hidden_sector_count;
+	uint32_t 		total_sectors_32;
+ 
+}__attribute__((packed)) fat_BPM_t;
+
+// A function that takes two bytes as little endian and reorders the bytes as one
+// big endian short
+// LSB is the first byte that is read
+// MSB is the second byte read
+uint16_t swap_endian(uint8_t LSB, uint8_t MSB){
+	uint16_t ret = (uint16_t)MSB;
+	ret = ret << 8;
+	ret = ret | (uint16_t)LSB;
+	return ret;
+}
+int flag2 = 0;
+typedef struct fat_root_dir
+{
+	uint8_t 		fname[8];
+	uint8_t 		extension[3];
+	uint8_t 	    	attributes;
+	uint8_t			reserved;
+	uint8_t			C_time;
+	uint16_t		time;
+	uint16_t		date;
+	uint16_t		last_access;
+	uint16_t		first_clus;
+	uint16_t		last_mod_t;
+	uint16_t		last_mod_date;
+	uint16_t		first_cluster;
+	uint32_t 		size;
+ 
+}__attribute__((packed)) fat_root_dir_t;
+
+typedef struct fat_BS
+{
+	fat_BPM_t bpm;
+	union
+	{
+		fat_extBS_16_t fat12_16;
+		fat_extBS_32_t fat32;
+	}bs;
+}__attribute__((packed)) fat_BS_t;
+
+fat_BS_t fat12;
+
+
+int calc_func(uint16_t first_cluster1){
+	int first_offset;
+	int fat_sector;
+	first_offset = first_cluster1 + first_cluster1/2;
+	fat_sector = 1 + first_offset/fat12.bpm.bytes_per_sector;
+	int ent_offset;
+	ent_offset = first_offset%fat12.bpm.bytes_per_sector;
+	FAT[ent_offset];
+	if(FAT[ent_offset] < 0xFF8 && FAT[ent_offset] != 0xFF7)
+		{
+			return FAT[ent_offset];
+		}
+	else
+		{
+			return -1;
+		}
+	
+}
+
+int flag = 0;
+uint16_t hold_clus;
+int next = 0;
+void recursion_func(int f1, int N, int D, int cluster){
+	int sector_offset;
+	int data_sector;
+	fat_root_dir_t root_dir;
+	ssize_t read_things;
+	off_t seek;
+	int y;
+	uint8_t a;
+	
+	uint8_t b;
+	int byte_offset;
+	uint16_t c;
+	int i;
+	int n_char=0;
+	char buf[16];
+	
+	int entries;
+	if(cluster == 0)
+	{
+		entries = fat12.bpm.root_entry_count;
+	}
+	else
+	{
+		entries = (fat12.bpm.sectors_per_cluster*fat12.bpm.bytes_per_sector)/32;
+	}
+	
+	for(y =0; y < entries; y++)
+	{
+
+		seek = lseek(f1, N + y*32, SEEK_SET);
+		read_things = read(f1, buf, 8);
+		if(buf[0] == 0x00)
+		{
+		break;
+		}
+		if(buf[0] == 0xE5)
+		{
+			continue;
+		}
+		if(buf[0] == '.')
+		{
+			continue;
+		}
+		printf("Filename: ");
+		
+		for(i =0; i<8; i++)
+		{
+			root_dir.fname[i] = buf[i];
+			printf("%c", root_dir.fname[i]);
+		}
+
+		printf(" \tExtension: ");
+		read_things = read(f1, buf, 3);
+		for(i = 0; i<3; i++)
+		{
+			root_dir.extension[i] = buf[i];
+			printf("%c", root_dir.extension[i]);
+		}
+	
+	
+		printf("\n");
+		printf("Attributes: ");
+		read_things = read(f1, buf, 1);
+		root_dir.attributes = buf[0];
+		if(root_dir.attributes  & 0b00000001)
+		{
+			printf("Read only \n");
+		}
+		if(root_dir.attributes  & 0b00000010)
+		{
+			printf("Hidden \n");
+		}
+		if(root_dir.attributes  & 0b00000100)
+		{
+			printf("System \n");
+		}
+		if(root_dir.attributes  & 0b00001000)
+		{
+			printf("Vol ID \n");
+		}
+		if(root_dir.attributes  & 0b00010000)
+		{
+			printf("Directory \n");
+		}
+		if(root_dir.attributes  & 0b00100000)
+		{
+			printf("Archive \n");
+		}
+		if(root_dir.attributes & 0x0F)
+		{
+			printf("Long File Name");
+		}
+
+		printf("Reserved: ");
+		read_things = read(f1, buf, 1);
+		root_dir.reserved = buf[0];
+		printf("%d \t", root_dir.reserved);
+
+		printf("C_time: ");
+		read_things = read(f1, buf, 1);
+		root_dir.C_time = buf[0];
+		printf("%d \t", root_dir.C_time);
+
+	
+		printf("\n");
+		printf("Time: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.time = c;
+
+		unsigned char hour = 0x00, min = 0x00, sec = 0x00;
+	     
+	  	hour = (unsigned char) (root_dir.time >> 11);
+	   	min = (unsigned char) ((root_dir.time >> 5) & 0x3F);
+	    	sec = (unsigned char) (root_dir.time & 0x1F);
+	    	sec = sec * 2;
+	     
+	    	printf("%02i:%02i:%02i", hour, min, sec);
+	    	
+	    	printf("\n");
+		printf("Date: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.date = c;
+
+		unsigned char month = 0x00, day = 0x00;
+		unsigned short year = 0x0000;
+
+	     
+	  	year = (unsigned short) (root_dir.date >> 9);
+	    	year += 1980;
+	    	month = (unsigned char) ((root_dir.date >> 5) & 0xF);
+	    	day = (unsigned char) (root_dir.date & 0x1F);
+	    	printf("%d/%d/%d", year, month, day);
+	    	
+	    	printf("\n");
+		printf("Last Access Date: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.last_access = c;
+
+	  	year = (unsigned short) (root_dir.last_access >> 9);
+	    	year += 1980;
+	    	month = (unsigned char) ((root_dir.last_access >> 5) & 0xF);
+	    	day = (unsigned char) (root_dir.last_access & 0x1F);
+	    	printf("%d/%d/%d", year, month, day);
+	    	
+	    	printf("\n");
+		printf("First Cluster: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.first_clus = c;
+		printf("%d \t", root_dir.first_clus);
+	
+		printf("\n");
+		printf("Last Mod Time: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.last_mod_t = c;
+	     
+	  	hour = (unsigned char) (root_dir.last_mod_t >> 11);
+	   	min = (unsigned char) ((root_dir.last_mod_t >> 5) & 0x3F);
+	    	sec = (unsigned char) (root_dir.last_mod_t & 0x1F);
+	    	sec = sec * 2;
+	     
+	    	printf("%02i:%02i:%02i", hour, min, sec);
+	    	
+	    	printf("\n");
+		printf("Last Mod Date: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.last_mod_date = c;
+
+	     
+	  	year = (unsigned short) (root_dir.last_mod_date >> 9);
+	    	year += 1980;
+	    	month = (unsigned char) ((root_dir.last_mod_date >> 5) & 0xF);
+	    	day = (unsigned char) (root_dir.last_mod_date & 0x1F);
+	    	printf("%d/%d/%d", year, month, day);
+	    	
+	    	printf("\n");
+		printf("First Cluster Part 2: ");
+		read_things = read(f1, buf, 2);
+		a = buf[0];
+		b = buf[1];
+		c = swap_endian(a, b);
+		root_dir.first_cluster = c;
+		printf("%d \t", root_dir.first_cluster);
+		next = root_dir.first_cluster;
+		printf("\n");
+		printf("Size: ");
+		read_things = read(f1, &root_dir.size, 4);
+		printf("%d bytes\t", root_dir.size);
+		printf("\n");
+	
+		if(flag == 0 && root_dir.first_cluster!=0)
+		{
+			flag =1;
+			hold_clus = root_dir.first_cluster;
+		}
+
+	if(flag2 == 1)
+	{
+		if(root_dir.attributes  & 0b00010000)
+		{
+			sector_offset = (next - hold_clus)*fat12.bpm.sectors_per_cluster;
+			data_sector = D + hold_clus + sector_offset;
+			byte_offset = data_sector*fat12.bpm.bytes_per_sector;
+			recursion_func(f1, byte_offset, D, next);
+		}
+		
+		}
+	}
+
+	/*next  = calc_func(next);
+	if(next!= -1)
+	{
+		recursion_func(f1, byte_offset, D, next);
+	}*/
+}
+
+
+
+int main(int argc, const char * argv[])
+{
+	
+	fat_root_dir_t root_dir;
+	int f1;
+	uint16_t hold_clus;
+	// 1. Open the file
+	if(argc < 2)
+	{
+	printf("No file given");
+	return -1;
+	}
+	if(argc == 3){
+	if(argv[2][0] == 'R')
+	{
+	printf("%s \n", argv[2]);
+	flag2 = 1;
+	}
+
+}
+	f1 = open(argv[1], O_RDONLY);
+	
+	int i;
+	int n_char=0;
+	char buf[16];
+	ssize_t read_things;
+	printf("Binary offset: ");
+	read_things = read(f1, buf, 3);
+	for(i =0; i<3; i++)
+	{
+		fat12.bpm.bootjmp[i] = buf[i];
+		printf("%x \t", fat12.bpm.bootjmp[i]);
+	}
+	printf("\n");
+	printf("Volume Label: ");
+	read_things = read(f1, buf, 8);
+	for(i =0; i<8; i++)
+	{
+		fat12.bpm.oem_name[i] = buf[i];
+		printf("%c \t", fat12.bpm.oem_name[i]);
+	}
+	
+	printf("\n");
+	printf("Bytes/Sector: ");
+	read_things = read(f1, buf, 2);
+	uint8_t a = buf[0];
+	uint8_t b = buf[1];
+	uint16_t c = swap_endian(a, b);
+	fat12.bpm.bytes_per_sector = c;
+	printf("%d \t", fat12.bpm.bytes_per_sector);
+
+	printf("\n");
+	printf("Sector/Cluster: ");
+	read_things = read(f1, buf, 1);
+	fat12.bpm.sectors_per_cluster = buf[0];
+	printf("%d \t", fat12.bpm.sectors_per_cluster);
+	
+	printf("\n");
+	printf("Reserved Sector: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.reserved_sector_count = c;
+	printf("%d \t", fat12.bpm.reserved_sector_count);
+	
+	printf("\n");
+	printf("No. of Fats: ");
+	read_things = read(f1, buf, 1);
+	fat12.bpm.table_count = buf[0];
+	printf("%d \t", fat12.bpm.table_count);
+	
+	printf("\n");
+	printf("No. of Root Directory Entries: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.root_entry_count = c;
+	printf("%d \t", fat12.bpm.root_entry_count);
+	
+	printf("\n");
+	printf("No. of logical sector: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.total_sectors_16 = c;
+	printf("%d \t", fat12.bpm.total_sectors_16);
+	
+	printf("\n");
+	printf("Medium Descriptor: ");
+	read_things = read(f1, buf, 1);
+	fat12.bpm.media_type = buf[0];
+	printf("%x \t", fat12.bpm.media_type);
+	
+	printf("\n");
+	printf("Sectors per fat: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.table_size_16 = c;
+	printf("%d \t", fat12.bpm.table_size_16);
+	
+	printf("\n");
+	printf("Sectors per track: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.sectors_per_track = c;
+	printf("%d \t", fat12.bpm.sectors_per_track);
+	
+	printf("\n");
+	printf("No. of heads: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.head_side_count = c;
+	printf("%d \t", fat12.bpm.head_side_count);
+	
+	printf("\n");
+	printf("No. of hidden Sectors: ");
+	read_things = read(f1, buf, 2);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.hidden_sector_count = c;
+	printf("%d \t", fat12.bpm.hidden_sector_count);
+	uint8_t d = buf[2];
+	uint8_t e = buf[3];
+	uint16_t f = swap_endian(d, e);
+	//even though in the lab report the length is given as 4, but on the website, the length is 4. Moreover, the struct also has uint32_t.
+	fat12.bpm.total_sectors_32 = f;
+	printf("%d \t", fat12.bpm.hidden_sector_count); 
+	
+	printf("\n");
+	printf("No. of total sectors: ");
+	read_things = read(f1, buf, 4);
+	a = buf[0];
+	b = buf[1];
+	c = swap_endian(a, b);
+	fat12.bpm.total_sectors_32 = c;
+	printf("%d \t", fat12.bpm.total_sectors_32);
+	d = buf[2];
+	e = buf[3];
+	f = swap_endian(d, e);
+	fat12.bpm.total_sectors_32 = f;
+	printf("%d \t", fat12.bpm.total_sectors_32);
+	printf("\n");	
+	
+	int X = 1 + fat12.bpm.table_size_16;
+	int Y = X + fat12.bpm.table_size_16;
+	int N = fat12.bpm.bytes_per_sector*Y;
+	int D = Y + ((fat12.bpm.root_entry_count*32)/fat12.bpm.bytes_per_sector) + 1;
+	
+	FAT = malloc(fat12.bpm.bytes_per_sector*sizeof(uint8_t));
+	int t;
+	int seek;
+	seek = lseek(f1, fat12.bpm.bytes_per_sector, SEEK_SET);
+	for(t = 0; t<fat12.bpm.bytes_per_sector; t++)
+	{
+		read_things = read(f1, &(FAT[t]), 1); 
+	}
+	
+	recursion_func(f1, N, D, 0);
+	
+	return 0;
+}

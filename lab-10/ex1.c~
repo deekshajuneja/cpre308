@@ -1,0 +1,13 @@
+#include <stdio.h>
+#include <stdint.h>
+int main(int argc, const char * argv[])
+{
+ uint32_t a = 0x12345678;
+ uint8_t *c = (uint8_t*)(&a);
+  if (*c == 0x78) {
+   printf("little-endian\n");
+  } else {
+   printf("big-endian\n");
+  }
+ return 0;
+}

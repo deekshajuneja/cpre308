@@ -1,0 +1,26 @@
+File printed
+Wed Feb 24 13:51:35 2016
+
+Wed Feb 24 13:51:35 2016
+
+output2.pdf
+black_white
+samplec.psFile printedFile printed
+
+Wed Feb 24 13:51:40 2016
+Wed Feb 24 13:51:40 2016
+
+
+Wed Feb 24 14:01:03 2016
+File printed
+Wed Feb 24 14:01:03 2016
+
+
+output2.pdf
+black_white
+samplec.psFile printedFile printed
+
+Wed Feb 24 14:01:08 2016
+Wed Feb 24 14:01:08 2016
+
+
